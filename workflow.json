@@ -1,0 +1,463 @@
+{
+  "name": "Social Media Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        -48
+      ],
+      "id": "schedule-trigger-id",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://google.serper.dev/news",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"q\": \"#SaaS Products\",\n  \"num\": 10\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        -48
+      ],
+      "id": "serper-request",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_SERPER_CREDENTIAL_ID",
+          "name": "Serper API Header Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "news",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        448,
+        -48
+      ],
+      "id": "split-out-id",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// SENTIMENT CLASSIFIER — Rule-Based Keyword Matching\n// Author: Social Media Monitoring System\n// ============================================================\n\n// ---- NEGATIVE KEYWORDS (customize this list freely) ----\nconst NEGATIVE_KEYWORDS = [\n  // Fraud / Trust Issues\n  'scam', 'fraud', 'fake', 'dishonest', 'deceptive', 'misleading',\n  'phishing', 'breach', 'hack', 'hacked', 'leaked', 'leak',\n  // Quality / Service Problems\n  'broken', 'issue', 'bug', 'glitch', 'crash', 'error',\n  'fail', 'failure', 'failed', 'problem', 'defective', 'useless',\n  // Negative Sentiment Words\n  'bad', 'terrible', 'awful', 'horrible', 'worst', 'poor',\n  'disappointing', 'disappointed', 'dissatisfied', 'angry',\n  'frustrated', 'frustrating', 'unacceptable', 'disgusting',\n  // Business and Legal\n  'lawsuit', 'sue', 'sued', 'illegal', 'banned', 'shutdown',\n  'recall', 'warning', 'dangerous', 'unsafe', 'risk', 'threat',\n  // Customer Experience\n  'refund', 'chargeback', 'overcharged', 'spam', 'ignore', 'ignored'\n];\n\n// ---- POSITIVE KEYWORDS (customize this list freely) ----\nconst POSITIVE_KEYWORDS = [\n  // Praise Words\n  'amazing', 'excellent', 'outstanding', 'fantastic', 'incredible',\n  'wonderful', 'brilliant', 'superb', 'exceptional', 'perfect',\n  // Positive Sentiment\n  'great', 'good', 'love', 'loved', 'best', 'happy', 'thrilled',\n  'impressed', 'impressive', 'delighted', 'satisfied', 'pleased',\n  // Success and Achievement\n  'success', 'successful', 'win', 'won', 'achieve', 'milestone',\n  'breakthrough', 'innovation', 'innovative', 'leading', 'award',\n  // Recommendations\n  'recommend', 'recommended', 'must-have', 'game-changer',\n  'top-rated', 'five-star', '5-star', 'highly rated'\n];\n\n// ---- GET ARTICLE DATA ----\nconst title   = ($json.title   || '').toLowerCase();\nconst snippet = ($json.snippet || '').toLowerCase();\nconst text    = title + ' ' + snippet;  // Combine for full scan\n\n// ---- SCORING SYSTEM ----\nlet negScore = 0;\nlet posScore = 0;\nconst matchedNeg = [];\nconst matchedPos = [];\n\n// Check each negative keyword\nNEGATIVE_KEYWORDS.forEach(keyword => {\n  if (text.includes(keyword)) {\n    negScore++;\n    matchedNeg.push(keyword);\n  }\n});\n\n// Check each positive keyword\nPOSITIVE_KEYWORDS.forEach(keyword => {\n  if (text.includes(keyword)) {\n    posScore++;\n    matchedPos.push(keyword);\n  }\n});\n\n// ---- DETERMINE SENTIMENT ----\n// Negative takes priority if scores are equal (safety-first)\nlet sentiment;\nif (negScore > 0 && negScore >= posScore) {\n  sentiment = 'Negative';\n} else if (posScore > 0 && posScore > negScore) {\n  sentiment = 'Positive';\n} else {\n  sentiment = 'Neutral';\n}\n\n// ---- RETURN ENRICHED ITEM ----\nreturn {\n  json: {\n    title:        $json.title   || 'No title',\n    snippet:      $json.snippet || 'No snippet',\n    url:          $json.link    || '',\n    source:       $json.source  || 'Unknown',\n    publishedAt:  $json.date    || new Date().toISOString(),\n    sentiment:    sentiment,\n    posScore:     posScore,\n    negScore:     negScore,\n    matchedPos:   matchedPos.join(', '),\n    matchedNeg:   matchedNeg.join(', '),\n    timestamp:    new Date().toISOString()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        -48
+      ],
+      "id": "js-code-node",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.sentiment }}",
+                    "rightValue": "Positive",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "f900898e-4063-429c-ad32-84827cc18f3a"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Positive"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "4e62502c-d687-43eb-b7c4-4356e1de9e80",
+                    "leftValue": "={{ $json.sentiment }}",
+                    "rightValue": "Negative",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Negative"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        896,
+        -64
+      ],
+      "id": "switch-node",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "YOUR_AIRTABLE_BASE_ID",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "YOUR_AIRTABLE_TABLE_ID",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "title": "={{ $json.title }}",
+            "snipet": "={{ $json.snippet }}",
+            "url": "={{ $json.url }}",
+            "source": "={{ $json.source }}",
+            "sentiment": "={{ $json.sentiment }}",
+            "timestamp": "={{ $json.timestamp }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "title",
+              "displayName": "title",
+              "type": "string"
+            },
+            {
+              "id": "snipet",
+              "displayName": "snipet",
+              "type": "string"
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "type": "string"
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "type": "string"
+            },
+            {
+              "id": "sentiment",
+              "displayName": "sentiment",
+              "type": "string"
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        -240
+      ],
+      "id": "airtable-create",
+      "name": "Create a record",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "YOUR_AIRTABLE_CREDENTIAL_ID",
+          "name": "Airtable PAT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_URL_OR_ID",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_NAME",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "title": "={{ $json.fields.title }}",
+            "snippet": "={{ $json.fields.snipet }}",
+            "sentiment": "={{ $json.fields.sentiment }}",
+            "timestamp": "={{ $json.fields.timestamp }}",
+            "url": "={{ $json.fields.url }}",
+            "source": "={{ $json.fields.source }}"
+          },
+          "matchingColumns": [
+            "url"
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1344,
+        -240
+      ],
+      "id": "gsheet-append-1",
+      "name": "Append or update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GSHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_URL_OR_ID",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_NAME",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "snippet": "={{ $('Code in JavaScript').item.json.snippet }}",
+            "title": "={{ $('Code in JavaScript').item.json.title }}",
+            "url": "={{ $('Code in JavaScript').item.json.url }}",
+            "source": "={{ $('Code in JavaScript').item.json.source }}",
+            "sentiment": "={{ $('Code in JavaScript').item.json.sentiment }}",
+            "timestamp": "={{ $('Code in JavaScript').item.json.timestamp }}"
+          },
+          "matchingColumns": [
+            "url"
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1120,
+        144
+      ],
+      "id": "gsheet-append-2",
+      "name": "Append or update row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GSHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "YOUR_SLACK_WEBHOOK_URL",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"🚨 *NEGATIVE MENTION DETECTED*\",\n  \"blocks\": [\n    {\n      \"type\": \"header\",\n      \"text\": {\n        \"type\": \"plain_text\",\n        \"text\": \"🚨 Negative Brand Mention Alert\"\n      }\n    },\n    {\n      \"type\": \"section\",\n      \"fields\": [\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"*Title:*\\n{{ $json.title }}\"\n        },\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"*Source:*\\n{{ $json.source }}\"\n        }\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"*Keywords Triggered:*\\n{{ $json.matchedNeg }}\"\n      }\n    },\n    {\n      \"type\": \"actions\",\n      \"elements\": [\n        {\n          \"type\": \"button\",\n          \"text\": {\n            \"type\": \"plain_text\",\n            \"text\": \"View Article\"\n          },\n          \"url\": \"{{ $json.url }}\",\n          \"style\": \"danger\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        -48
+      ],
+      "id": "slack-notify",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_URL_OR_ID",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_NAME",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "title": "={{ $('Switch').item.json.title }}",
+            "snippet": "={{ $('Switch').item.json.snippet }}",
+            "sentiment": "={{ $('Switch').item.json.sentiment }}",
+            "timestamp": "={{ $('Switch').item.json.timestamp }}",
+            "url": "={{ $('Switch').item.json.url }}",
+            "source": "={{ $('Switch').item.json.source }}"
+          },
+          "matchingColumns": [
+            "url"
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1344,
+        -48
+      ],
+      "id": "gsheet-append-3",
+      "name": "Append or update row in sheet2",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GSHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Create a record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append or update row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a record": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Lagos"
+  }
+}
